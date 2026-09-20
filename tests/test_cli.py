@@ -94,11 +94,12 @@ def test_cli_markdown_with_plots(tmp_path):
     assert "## Visualizations" in md_content
     assert "![Class balance](assets/chart_01.png)" in md_content
 
-    # Verify JSON is strictly parseable without NaN or Infinity
+    # Verify JSON is strictly RFC 8259 compliant (rejecting bare NaN/Infinity constants)
+    def _reject_constant(constant):
+        raise ValueError(f"Illegal RFC 8259 JSON constant: {constant}")
+
     raw_json = (out_dir / "report.json").read_text(encoding="utf-8")
-    assert "NaN" not in raw_json
-    assert "Infinity" not in raw_json
-    parsed = json.loads(raw_json)
+    parsed = json.loads(raw_json, parse_constant=_reject_constant)
     assert parsed["meta"]["image_files"] == 3
 
 
