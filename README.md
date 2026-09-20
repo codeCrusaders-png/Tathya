@@ -120,6 +120,28 @@ class-aware sample.
 - Near-duplicate groups are approximate (perceptual hash) — always eyeball
   them before deleting anything. The JSON report contains the full lists.
 
+## Architecture
+
+![Tathya Architecture](docs/architecture.png)
+
+Tathya processes image datasets across three core functional subsystems orchestrated by `cli.py`:
+
+1. **Dataset Inspection**:
+   - **Layout Scanner** (`scanning.py`): Automatically discovers files, filters noise directories, and identifies dataset structure (folder-per-class, splits, flat with CSV).
+   - **Image Metadata** (`analysis.py`): Reads image dimensions, color modes, and EXIF orientations across parallel worker threads.
+   - **Pixel Statistics** (`analysis.py`): Computes channel means/stds, Hasler-Süsstrunk colorfulness, and exposure metrics on downscaled thumbnails.
+   - **Geometry Aggregator** (`analysis.py`): Analyzes aspect ratio distributions and calculates optimal recommended resize targets.
+
+2. **Quality Analysis**:
+   - **Duplicate Detector** (`hashing.py`): Flags exact SHA-256 byte duplicates and clusters perceptual near-duplicates via 64-bit dHash. Detects train/val/test data leakage.
+   - **Trainability Baseline** (`model.py`): Sanity-checks dataset separability using a lightweight PCA + Logistic Regression 3-fold CV.
+   - **Alerts and Advice** (`cli.py`): Aggregates findings and generates prioritized severity-tagged recommendations.
+
+3. **Reporting**:
+   - **Chart Rendering** (`plots.py`): Builds distribution, class balance, and aspect ratio visualizations encoded directly into base64 images.
+   - **Report Renderers** (`report.py`): Produces an interactive, offline HTML report dashboard and an easy-to-read Markdown summary.
+   - **Report Files & Console Summary** (`cli.py`): Exports `report.html`, `report.md`, `report.json`, and outputs the CLI summary directly in terminal.
+
 ## Project layout
 
 ```
@@ -132,6 +154,8 @@ tathya/
   plots.py                  matplotlib charts → base64 data URIs
   report.py                 HTML & Markdown renderers
   cli.py                    orchestration + console summary
+docs/
+  architecture.png          system architecture diagram
 make_sample_dataset.py      synthetic demo datasets (fruits_veggies,
                             split_dataset, flat_mixed)
 ```
