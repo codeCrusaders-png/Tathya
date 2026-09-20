@@ -67,9 +67,12 @@ def run_baseline(records, labels, seed=7, per_class=400, max_images=20000, thumb
 
     majority_baseline = round(float(max(counts.values()) / len(y)), 4) if len(y) else 0.0
 
+    min_train_size = int(len(x) * (cv_folds - 1) / cv_folds)
+    n_components = min(64, max(2, min_train_size - 1))
+
     pipeline = make_pipeline(
-        PCA(n_components=min(64, x.shape[0] - 1)),
-        LogisticRegression(max_iter=2000),
+        PCA(n_components=n_components),
+        LogisticRegression(max_iter=2000, random_state=seed),
     )
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=seed)
     try:
@@ -80,7 +83,7 @@ def run_baseline(records, labels, seed=7, per_class=400, max_images=20000, thumb
     return {
         "images_used": int(len(x)),
         "classes_used": len(counts),
-        "feature_pipeline": f"{thumb}x{thumb} grayscale + PCA(64) + logistic regression",
+        "feature_pipeline": f"{thumb}x{thumb} grayscale + PCA({n_components}) + logistic regression",
         "cv_folds": cv_folds,
         "accuracy_mean": round(float(scores.mean()), 4),
         "accuracy_std": round(float(scores.std()), 4),

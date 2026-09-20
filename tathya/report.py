@@ -193,7 +193,7 @@ def _build_markdown_details(lines, findings, asset_dir="assets"):
             for group in duplicates.get("near", [])[:8]:
                 lines.append(f"  - `{group[0]}` + {len(group) - 1} more")
         for leak in duplicates.get("leakage", []):
-            lines.append(f"- **Leakage risk:** {leak['groups']} near-duplicate group(s) span "
+            lines.append(f"- **Leakage risk:** {leak['groups']} duplicate group(s) span "
                          f"`{leak['between']}` ({leak['images']} images).")
         lines.append("")
 
@@ -493,7 +493,7 @@ def render_html(findings):
             lines.append("</details>")
         for leak in duplicates.get("leakage", []):
             lines.append(f'<div class="alert error"><span class="tag">[LEAK]</span> '
-                         f"{leak['groups']} near-duplicate group(s) span "
+                         f"{leak['groups']} duplicate group(s) span "
                          f"<code>{_esc(leak['between'])}</code> "
                          f"({leak['images']} images) — validation could be optimistic.</div>")
 

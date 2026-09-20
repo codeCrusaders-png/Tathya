@@ -132,3 +132,86 @@ def find_near_duplicates(records, threshold=DEFAULT_DUP_THRESHOLD, max_images=20
     groups = [recs for recs in buckets.values() if len(recs) > 1]
     groups.sort(key=lambda group: (-len(group), group[0].rel_path))
     return groups
+
+
+def find_split_leakage(exact_groups, near_groups, splits):
+    """Detect duplicate image clusters that span across different dataset splits.
+
+    Unifies exact and near duplicate groups using connected components so
+    images present in both are not double-counted.
+
+    Parameters
+    ----------
+    exact_groups : list of list of ImageRecord
+        Groups of exact byte-level duplicates.
+    near_groups : list of list of ImageRecord
+        Groups of perceptual near-duplicates.
+    splits : list of dict or list of str
+        Layout splits list, where each entry has a 'name' key or is a split string.
+
+    Returns
+    -------
+    list of dict
+        List of leakage summaries sorted by split name interaction:
+        [{'between': 'test/train', 'groups': 1, 'images': 2}, ...]
+    """
+    if not splits:
+        return []
+
+    split_names_set = {
+        s["name"] if isinstance(s, dict) and "name" in s else str(s)
+        for s in splits
+    }
+    if not split_names_set:
+        return []
+
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x, y):
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[rx] = ry
+
+    all_groups = list(exact_groups or []) + list(near_groups or [])
+    if not all_groups:
+        return []
+
+    for group in all_groups:
+        if not group:
+            continue
+        first = group[0].rel_path
+        for rec in group[1:]:
+            union(first, rec.rel_path)
+
+    clusters = {}
+    for group in all_groups:
+        for rec in group:
+            root = find(rec.rel_path)
+            clusters.setdefault(root, set()).add(rec.rel_path)
+
+    leakage_map = {}
+    for cluster in clusters.values():
+        splits_in_cluster = set()
+        for rel_path in cluster:
+            parts = rel_path.replace("\\", "/").split("/")
+            for p in parts[:-1]:
+                if p in split_names_set:
+                    splits_in_cluster.add(p)
+                    break
+
+        if len(splits_in_cluster) > 1:
+            between = "/".join(sorted(splits_in_cluster))
+            if between not in leakage_map:
+                leakage_map[between] = {"between": between, "groups": 0, "images": 0}
+            leakage_map[between]["groups"] += 1
+            leakage_map[between]["images"] += len(cluster)
+
+    return sorted(leakage_map.values(), key=lambda item: item["between"])
+

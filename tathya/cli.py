@@ -22,7 +22,7 @@ from .analysis import (
     recommended_resize,
     summarize_channels,
 )
-from .hashing import find_exact_duplicates, find_near_duplicates
+from .hashing import find_exact_duplicates, find_near_duplicates, find_split_leakage
 from .model import run_baseline
 from .plots import build_plots
 from .report import render_html, render_markdown
@@ -640,16 +640,7 @@ def main(argv=None):
 
         # train/val/test leakage check
         if layout.splits:
-            for group in list(exact_groups) + list(near_groups):
-                split_names = {rec.rel_path.split("/")[0] for rec in group}
-                if len(split_names) > 1:
-                    between = "/".join(sorted(split_names))
-                    existing = next((item for item in leakage if item["between"] == between), None)
-                    if existing:
-                        existing["groups"] += 1
-                        existing["images"] += len(group)
-                    else:
-                        leakage.append({"between": between, "groups": 1, "images": len(group)})
+            leakage = find_split_leakage(exact_groups, near_groups, layout.splits)
     elif not args.silent:
         print("  skipping duplicate detection (--no-dedup)")
 

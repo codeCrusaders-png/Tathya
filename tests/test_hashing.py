@@ -81,3 +81,97 @@ def test_dhash_and_duplicates_handle_corrupt_image(tmp_path):
     assert len(near_groups) == 0
 
 
+def test_find_split_leakage_no_double_counting():
+    from tathya.hashing import find_split_leakage
+
+    # Exactly identical image pair spanning train and test
+    r_train = ImageRecord(path="/data/train/cat1.png", rel_path="train/cat1.png", size_bytes=100)
+    r_test = ImageRecord(path="/data/test/cat1.png", rel_path="test/cat1.png", size_bytes=100)
+
+    # Appears in exact_groups AND near_groups
+    exact_groups = [[r_train, r_test]]
+    near_groups = [[r_train, r_test]]
+    splits = [{"name": "train"}, {"name": "test"}]
+
+    leakage = find_split_leakage(exact_groups, near_groups, splits)
+    assert len(leakage) == 1
+    assert leakage[0]["between"] == "test/train"
+    # Crucial: 1 group and 2 images, NOT double counted to 2 groups and 4 images
+    assert leakage[0]["groups"] == 1
+    assert leakage[0]["images"] == 2
+
+
+def test_find_split_leakage_three_way_split():
+    from tathya.hashing import find_split_leakage
+
+    r1 = ImageRecord(path="/data/train/c.png", rel_path="train/c.png", size_bytes=100)
+    r2 = ImageRecord(path="/data/val/c.png", rel_path="val/c.png", size_bytes=100)
+    r3 = ImageRecord(path="/data/test/c.png", rel_path="test/c.png", size_bytes=100)
+
+    near_groups = [[r1, r2, r3]]
+    splits = [{"name": "train"}, {"name": "val"}, {"name": "test"}]
+
+    leakage = find_split_leakage([], near_groups, splits)
+    assert len(leakage) == 1
+    assert leakage[0]["between"] == "test/train/val"
+    assert leakage[0]["groups"] == 1
+    assert leakage[0]["images"] == 3
+
+
+def test_find_split_leakage_within_split_only():
+    from tathya.hashing import find_split_leakage
+
+    # Both images are inside 'train'
+    r1 = ImageRecord(path="/data/train/cat1.png", rel_path="train/cat1.png", size_bytes=100)
+    r2 = ImageRecord(path="/data/train/cat2.png", rel_path="train/cat2.png", size_bytes=100)
+
+    exact_groups = [[r1, r2]]
+    splits = [{"name": "train"}, {"name": "test"}]
+
+    leakage = find_split_leakage(exact_groups, [], splits)
+    assert len(leakage) == 0
+
+
+def test_find_split_leakage_windows_backslashes():
+    from tathya.hashing import find_split_leakage
+
+    # Path containing Windows backslashes
+    r1 = ImageRecord(path=r"C:\data\train\cat\1.png", rel_path=r"train\cat\1.png", size_bytes=100)
+    r2 = ImageRecord(path=r"C:\data\test\cat\1.png", rel_path=r"test\cat\1.png", size_bytes=100)
+
+    leakage = find_split_leakage([[r1, r2]], [], [{"name": "train"}, {"name": "test"}])
+    assert len(leakage) == 1
+    assert leakage[0]["between"] == "test/train"
+    assert leakage[0]["groups"] == 1
+    assert leakage[0]["images"] == 2
+
+
+def test_dhash_across_formats(tmp_path):
+    # Same visual pattern saved as PNG and JPEG
+    png_path = tmp_path / "img.png"
+    jpg_path = tmp_path / "img.jpg"
+
+    img = Image.new("RGB", (64, 64), color="blue")
+    img.save(png_path, "PNG")
+    img.save(jpg_path, "JPEG")
+
+    h_png = compute_dhash(str(png_path))
+    h_jpg = compute_dhash(str(jpg_path))
+
+    # Difference hashes should match or have very low distance
+    assert (h_png ^ h_jpg).bit_count() <= 2
+
+    r_png = ImageRecord(path=str(png_path), rel_path="img.png", size_bytes=png_path.stat().st_size)
+    r_jpg = ImageRecord(path=str(jpg_path), rel_path="img.jpg", size_bytes=jpg_path.stat().st_size)
+
+    # Exact duplicate check should not group them (different byte encoding)
+    exact = find_exact_duplicates([r_png, r_jpg])
+    assert len(exact) == 0
+
+    # Near duplicate check should group them (perceptually near-identical)
+    near = find_near_duplicates([r_png, r_jpg], threshold=4)
+    assert len(near) == 1
+    assert len(near[0]) == 2
+
+
+
