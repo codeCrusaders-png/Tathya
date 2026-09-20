@@ -25,6 +25,7 @@ IMAGE_EXTENSIONS = {
 NOISE_DIRNAMES = {
     ".git", "__pycache__", ".venv", "venv", "node_modules",
     ".idea", ".vscode", ".ipynb_checkpoints",
+    "tathya_report", "dataset_report", "test_report", "test_verify",
 }
 
 SPLIT_DIRNAMES = {

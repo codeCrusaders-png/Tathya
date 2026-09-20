@@ -94,3 +94,31 @@ def test_detect_flat_with_labels_csv(tmp_path):
     assert layout.class_of["img1.jpg"] == "cat"
     assert layout.class_of["img2.jpg"] == "dog"
 
+
+def test_discover_images_excludes_report_and_custom_dirs(tmp_path):
+    _create_image(tmp_path / "valid" / "photo.jpg")
+    _create_image(tmp_path / "tathya_report" / "assets" / "chart_01.png")
+    _create_image(tmp_path / "custom_output" / "assets" / "chart_02.png")
+
+    records, _ = discover_images(tmp_path, exclude_dirs=[tmp_path / "custom_output"])
+    rel_paths = {rec.rel_path for rec in records}
+
+    assert "valid/photo.jpg" in rel_paths
+    assert not any("tathya_report" in p for p in rel_paths)
+    assert not any("custom_output" in p for p in rel_paths)
+    assert len(records) == 1
+
+
+def test_detect_partial_split_dataset_layout(tmp_path):
+    # Only train and test, no val
+    _create_image(tmp_path / "train" / "cat" / "c1.jpg")
+    _create_image(tmp_path / "test" / "cat" / "c2.jpg")
+
+    records, _ = discover_images(tmp_path)
+    layout = detect_layout(records, tmp_path)
+
+    assert layout.kind == "split_class_folders"
+    split_names = {s["name"] for s in layout.splits}
+    assert split_names == {"train", "test"}
+
+

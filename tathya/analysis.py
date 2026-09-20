@@ -18,12 +18,27 @@ def read_metadata(rec):
     those separately).
     """
     with Image.open(rec.path) as im:
+        raw_width, raw_height = im.width, im.height
+        try:
+            exif = im.getexif()
+            orientation = int(exif.get(274, 1)) if exif else 1
+        except Exception:
+            orientation = 1
+
+        # EXIF orientations 5, 6, 7, 8 swap displayed width and height (90/270 deg rotation)
+        if orientation in (5, 6, 7, 8):
+            disp_width, disp_height = raw_height, raw_width
+        else:
+            disp_width, disp_height = raw_width, raw_height
+
         info = {
-            "width": im.width,
-            "height": im.height,
+            "width": disp_width,
+            "height": disp_height,
+            "raw_width": raw_width,
+            "raw_height": raw_height,
             "mode": im.mode,
             "format": (im.format or "UNKNOWN").upper(),
-            "exif_orientation": int(im.getexif().get(274, 1)),
+            "exif_orientation": orientation,
             "frames": int(getattr(im, "n_frames", 1)),
         }
     return info
@@ -36,10 +51,17 @@ def read_pixel_stats(rec, thumb=192):
     images stay cheap to analyse.
     """
     with Image.open(rec.path) as im:
-        rgb = im.convert("RGB")
+        if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+            # Composite onto white background so transparent areas don't falsely skew dark
+            bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
+            rgba = im.convert("RGBA")
+            bg.paste(rgba, mask=rgba.split()[3])
+            rgb = bg.convert("RGB")
+        else:
+            rgb = im.convert("RGB")
+
         rgb.thumbnail((thumb, thumb))
-        gray = im.convert("L")
-        gray.thumbnail((thumb, thumb))
+        gray = rgb.convert("L")
 
     rgb_arr = np.asarray(rgb, dtype=np.float32) / 255.0
     gray_arr = np.asarray(gray, dtype=np.float32) / 255.0

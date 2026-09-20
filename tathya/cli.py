@@ -47,6 +47,20 @@ def _json_default(obj):
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
+def _sanitize_floats(obj):
+    """Recursively replace NaN and Inf with None for strict JSON compliance."""
+    import math
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_floats(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_floats(v) for v in obj]
+    return obj
+
+
 class _Progress:
     def __init__(self, quiet, label, total):
         self.quiet = quiet
@@ -190,11 +204,11 @@ def _compose_alerts(ctx):
         alerts.append({"level": "warn",
                        "message": f"{duplicates['near_groups']} near-duplicate group(s){note} - "
                                   f"{duplicates['near_images']} perceptually similar images "
-                                  f"(~{human_size(duplicates['near_bytes'])} wasted)."})
+                                  f"(~{human_size(duplicates['near_bytes'])} potential duplicate storage)."})
     for leak in duplicates.get("leakage", []):
         alerts.append({"level": "error",
-                       "message": f"Data leakage risk: {leak['groups']} near-duplicate group(s) "
-                                  f"span {leak['between']} ({leak['images']} images)."})
+                       "message": f"Potential data leakage risk: {leak['groups']} duplicate group(s) "
+                                  f"span {leak['between']} ({leak['images']} images) — manual verification advised."})
 
     counts = classes.get("counts", {})
     if counts:
@@ -456,7 +470,8 @@ def _write_reports(findings, output_dir, formats):
         written.append(path)
     if "json" in formats:
         path = output_dir / "report.json"
-        path.write_text(json.dumps(findings, indent=2, ensure_ascii=False,
+        clean_findings = _sanitize_floats(findings)
+        path.write_text(json.dumps(clean_findings, indent=2, ensure_ascii=False,
                                    default=_json_default), encoding="utf-8")
         written.append(path)
     return written
@@ -500,6 +515,21 @@ def _write_empty_report(root, output_dir, formats, elapsed, quiet=False):
 def main(argv=None):
     args = _parse_args(argv)
     start = time.perf_counter()
+
+    # Validate numeric options
+    if args.workers is not None and args.workers < 1:
+        print("[tathya] error: --workers must be >= 1", file=sys.stderr)
+        return 2
+    if args.pixel_sample < 0:
+        print("[tathya] error: --pixel-sample must be >= 0", file=sys.stderr)
+        return 2
+    if args.dup_threshold < 0:
+        print("[tathya] error: --dup-threshold must be >= 0", file=sys.stderr)
+        return 2
+    if args.near_dup_cap < 1:
+        print("[tathya] error: --near-dup-cap must be >= 1", file=sys.stderr)
+        return 2
+
     root = Path(args.root).expanduser().resolve()
     if not root.is_dir():
         print(f"[tathya] error: not a directory: {root}", file=sys.stderr)
@@ -509,7 +539,7 @@ def main(argv=None):
     if not args.silent:
         print(f"[tathya] Investigating {root}")
 
-    records, missed_files = discover_images(root)
+    records, missed_files = discover_images(root, exclude_dirs=[output_dir])
     if not args.silent:
         print(f"  found {len(records):,} image file(s) "
               f"(skipped {missed_files:,} non-image file(s))")

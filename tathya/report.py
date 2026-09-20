@@ -70,10 +70,10 @@ def render_markdown(findings, asset_dir="assets"):
     lines.append(f"| Disk used by images | {human_size(images.get('disk_bytes', 0))} |")
     lines.append("")
 
-    return _build_markdown_details(lines, findings)
+    return _build_markdown_details(lines, findings, asset_dir=asset_dir)
 
 
-def _build_markdown_details(lines, findings):
+def _build_markdown_details(lines, findings, asset_dir="assets"):
     layout = findings.get("layout", {})
     classes = findings.get("classes", {})
     images = findings.get("images", {})
@@ -203,11 +203,29 @@ def _build_markdown_details(lines, findings):
         lines.append("")
         lines.append(f"- CV accuracy: **{baseline['accuracy_mean'] * 100:.1f}% ± "
                      f"{baseline['accuracy_std'] * 100:.1f}%** "
-                     f"(3-fold, {baseline['images_used']} images, "
+                     f"({baseline.get('cv_folds', 3)}-fold, {baseline['images_used']} images, "
                      f"{baseline['classes_used']} classes)")
+        if "majority_baseline" in baseline:
+            lines.append(f"- Majority class baseline: **{baseline['majority_baseline'] * 100:.1f}%**")
         lines.append(f"- Pipeline: {baseline['feature_pipeline']}")
         lines.append(f"- {baseline.get('note', '')}")
         lines.append("")
+
+    # --- visualizations ----------------------------------------------------
+    plots = findings.get("plots", [])
+    if plots and asset_dir:
+        lines.append("## Visualizations")
+        lines.append("")
+        for idx, plot in enumerate(plots, start=1):
+            title = plot.get("title", f"Chart {idx}")
+            caption = plot.get("caption", "")
+            img_path = f"{asset_dir}/chart_{idx:02d}.png"
+            lines.append(f"### {title}")
+            lines.append("")
+            lines.append(f"![{title}]({img_path})")
+            if caption:
+                lines.append(f"*{caption}*")
+            lines.append("")
 
     recs = findings.get("recommendations", [])
     if recs:
@@ -482,13 +500,14 @@ def render_html(findings):
     # Baseline ----------------------------------------------------------------
     if baseline:
         lines.append("<h2>Trainability baseline</h2>")
+        maj_str = f" · majority baseline: <strong>{baseline['majority_baseline'] * 100:.1f}%</strong>" if "majority_baseline" in baseline else ""
         lines.append(f"<p>Cross-validation accuracy: "
                      f"<strong>{baseline['accuracy_mean'] * 100:.1f}%</strong>"
                      f" ± {baseline['accuracy_std'] * 100:.1f}% "
-                     f"(3-fold, {baseline['images_used']} images, "
-                     f"{baseline['classes_used']} classes) on "
+                     f"({baseline.get('cv_folds', 3)}-fold, {baseline['images_used']} images, "
+                     f"{baseline['classes_used']} classes{maj_str}) on "
                      f"{_esc(baseline['feature_pipeline'])}.</p>")
-        lines.append(f"<p>{_esc(baseline.get('note', ''))}</p>")
+        lines.append(f"<p class='muted'>{_esc(baseline.get('note', ''))}</p>")
 
     # Charts ------------------------------------------------------------------
     if plots:

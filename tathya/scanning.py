@@ -38,44 +38,76 @@ class Layout:
     notes: list = field(default_factory=list)
 
 
-def discover_images(root):
+def discover_images(root, exclude_dirs=None):
     """Walk ``root`` collecting every image file.
 
-    Returns ``(records, missed_files)`` where ``records`` is a list of
-    :class:`ImageRecord` and ``missed_files`` is the number of non-image files
-    found inside the tree (config files, READMEs, label caches, ...).
+    Parameters
+    ----------
+    root : str or Path
+        Root directory to scan.
+    exclude_dirs : list of (str or Path), optional
+        Directories to exclude from scanning (e.g., report output directory).
+
+    Returns
+    -------
+    (records, missed_files) : (list of ImageRecord, int)
     """
-    root = Path(root)
+    root = Path(root).resolve()
+    resolved_excludes = set()
+    if exclude_dirs:
+        for ed in exclude_dirs:
+            if ed is not None:
+                try:
+                    resolved_excludes.add(str(Path(ed).resolve()))
+                except Exception:
+                    pass
+
     records = []
-    for dirpath, dirnames, filenames in os.walk(root):
+    for dirpath, dirnames, filenames in os.walk(root, onerror=lambda _: None):
+        # Exclude known noise and explicitly excluded paths (like output report folders)
+        current_dir = str(Path(dirpath).resolve())
         dirnames[:] = [
             d for d in dirnames
-            if not d.startswith(".") and d not in NOISE_DIRNAMES
+            if not d.startswith(".")
+            and d not in NOISE_DIRNAMES
+            and str(Path(dirpath, d).resolve()) not in resolved_excludes
         ]
+        if current_dir in resolved_excludes:
+            continue
+
         for filename in filenames:
             if filename.startswith("."):
                 continue
             ext = os.path.splitext(filename)[1].lower()
             if ext in IMAGE_EXTENSIONS:
                 full = os.path.join(dirpath, filename)
-                rel = os.path.relpath(full, root).replace("\\", "/")
                 try:
+                    rel = os.path.relpath(full, root).replace("\\", "/")
                     size = os.path.getsize(full)
                 except OSError:
                     size = 0
+                    rel = filename
                 records.append(ImageRecord(path=full, rel_path=rel, size_bytes=size))
+
     records.sort(key=lambda rec: rec.rel_path)
-    missed = _count_non_image_files(root)
+    missed = _count_non_image_files(root, exclude_dirs=resolved_excludes)
     return records, missed
 
 
-def _count_non_image_files(root):
+def _count_non_image_files(root, exclude_dirs=None):
     count = 0
-    for dirpath, dirnames, filenames in os.walk(root):
+    resolved_excludes = set(exclude_dirs) if exclude_dirs else set()
+    for dirpath, dirnames, filenames in os.walk(root, onerror=lambda _: None):
+        current_dir = str(Path(dirpath).resolve())
         dirnames[:] = [
             d for d in dirnames
-            if not d.startswith(".") and d not in NOISE_DIRNAMES
+            if not d.startswith(".")
+            and d not in NOISE_DIRNAMES
+            and str(Path(dirpath, d).resolve()) not in resolved_excludes
         ]
+        if current_dir in resolved_excludes:
+            continue
+
         for filename in filenames:
             if filename.startswith("."):
                 continue

@@ -16,15 +16,20 @@ def compute_dhash(path, size=(9, 8)):
     The image is resized to 9x8 grayscale (aspect ratio ignored, like the
     classic dHash implementation) and each bit records whether the right
     neighbour pixel is brighter than the left one.
+
+    Returns None if the image cannot be opened or decoded.
     """
-    with Image.open(path) as im:
-        gray = im.convert("L").resize(size, Image.Resampling.BILINEAR)
-    arr = np.asarray(gray, dtype=np.int16)
-    diff = (arr[:, 1:] > arr[:, :-1]).ravel()
-    value = 0
-    for bit in diff:
-        value = (value << 1) | int(bit)
-    return value
+    try:
+        with Image.open(path) as im:
+            gray = im.convert("L").resize(size, Image.Resampling.BILINEAR)
+        arr = np.asarray(gray, dtype=np.int16)
+        diff = (arr[:, 1:] > arr[:, :-1]).ravel()
+        value = 0
+        for bit in diff:
+            value = (value << 1) | int(bit)
+        return value
+    except Exception:
+        return None
 
 
 def find_exact_duplicates(records):
@@ -35,7 +40,11 @@ def find_exact_duplicates(records):
     """
     buckets = {}
     for rec in records:
-        buckets.setdefault(sha256_file(rec.path), []).append(rec)
+        try:
+            digest = sha256_file(rec.path)
+            buckets.setdefault(digest, []).append(rec)
+        except OSError:
+            continue
     groups = [recs for recs in buckets.values() if len(recs) > 1]
     groups.sort(key=lambda group: (-len(group), group[0].rel_path))
     return groups
@@ -90,9 +99,18 @@ def find_near_duplicates(records, threshold=DEFAULT_DUP_THRESHOLD, max_images=20
     else:
         sampled = list(records)
 
-    hashes = [compute_dhash(rec.path) for rec in sampled]
+    valid_sampled, hashes = [], []
+    for rec in sampled:
+        h = compute_dhash(rec.path)
+        if h is not None:
+            valid_sampled.append(rec)
+            hashes.append(h)
+
+    if not hashes:
+        return []
+
     tables = [dict() for _ in range(4)]
-    dsu = _DisjointSet(len(sampled))
+    dsu = _DisjointSet(len(valid_sampled))
 
     for i, h in enumerate(hashes):
         slices = (
@@ -109,7 +127,7 @@ def find_near_duplicates(records, threshold=DEFAULT_DUP_THRESHOLD, max_images=20
             table.setdefault(key, []).append(i)
 
     buckets = {}
-    for i, rec in enumerate(sampled):
+    for i, rec in enumerate(valid_sampled):
         buckets.setdefault(dsu.find(i), []).append(rec)
     groups = [recs for recs in buckets.values() if len(recs) > 1]
     groups.sort(key=lambda group: (-len(group), group[0].rel_path))

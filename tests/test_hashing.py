@@ -57,3 +57,27 @@ def test_dhash_and_near_duplicates(tmp_path):
     assert "img1.png" in near_rel
     assert "img2.png" in near_rel
 
+
+def test_dhash_and_duplicates_handle_corrupt_image(tmp_path):
+    corrupt_file = tmp_path / "corrupt.png"
+    corrupt_file.write_bytes(b"not an image file")
+    rec_corrupt = ImageRecord(
+        path=str(corrupt_file),
+        rel_path=corrupt_file.name,
+        size_bytes=corrupt_file.stat().st_size,
+    )
+
+    # compute_dhash returns None on corrupt files without crashing
+    assert compute_dhash(str(corrupt_file)) is None
+
+    # find_exact_duplicates and find_near_duplicates tolerate corrupt files
+    valid_file = tmp_path / "valid.png"
+    rec_valid = _create_image(valid_file, color="red")
+
+    exact_groups = find_exact_duplicates([rec_corrupt, rec_valid])
+    assert len(exact_groups) == 0
+
+    near_groups = find_near_duplicates([rec_corrupt, rec_valid])
+    assert len(near_groups) == 0
+
+

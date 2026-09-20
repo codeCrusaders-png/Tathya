@@ -31,6 +31,23 @@ def test_read_metadata(tmp_path):
     assert meta["frames"] == 1
 
 
+def test_read_metadata_exif_orientation(tmp_path):
+    img_path = tmp_path / "rotated.jpg"
+    img = Image.new("RGB", (150, 100), color=(100, 100, 100))
+    exif = img.getexif()
+    exif[0x0112] = 6  # 90 CW orientation -> swaps width and height
+    img.save(img_path, "JPEG", exif=exif)
+
+    rec = ImageRecord(path=str(img_path), rel_path=img_path.name, size_bytes=img_path.stat().st_size)
+    meta = read_metadata(rec)
+
+    assert meta["raw_width"] == 150
+    assert meta["raw_height"] == 100
+    assert meta["width"] == 100
+    assert meta["height"] == 150
+    assert meta["exif_orientation"] == 6
+
+
 def test_read_pixel_stats(tmp_path):
     img_path = tmp_path / "red.png"
     rec = _create_image(img_path, size=(50, 50), color=(255, 0, 0))
@@ -44,6 +61,19 @@ def test_read_pixel_stats(tmp_path):
     assert r_mean > 0.95
     assert g_mean < 0.05
     assert b_mean < 0.05
+
+
+def test_read_pixel_stats_transparent_png(tmp_path):
+    img_path = tmp_path / "transparent.png"
+    img = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
+    img.save(img_path)
+
+    rec = ImageRecord(path=str(img_path), rel_path=img_path.name, size_bytes=img_path.stat().st_size)
+    stats = read_pixel_stats(rec)
+
+    # When composited onto white, fully transparent pixels should show brightness near 1.0
+    assert stats["brightness"] > 0.95
+
 
 
 def test_aggregate_geometry_and_recommended_resize():
