@@ -1,0 +1,9 @@
+# dataset_detective — runtime dependencies
+# Python 3.10+ (tested on 3.13/3.14)
+
+Pillow>=10.0
+numpy>=1.24
+matplotlib>=3.7
+
+# Optional but recommended: enables the "can I train on this?" baseline model
+scikit-learn>=1.3
