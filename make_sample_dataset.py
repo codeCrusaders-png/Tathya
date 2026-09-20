@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate small synthetic (but realistic-looking) image datasets for demoing
-dataset_detective.  Run:
+tathya.  Run:
 
     python make_sample_dataset.py [--out sample_data] [--seed 7]
 

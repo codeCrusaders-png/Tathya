@@ -1,11 +1,11 @@
-"""Tests for dataset_detective.hashing."""
+"""Tests for tathya.hashing."""
 import shutil
 from pathlib import Path
 
 from PIL import Image
 
-from dataset_detective.hashing import compute_dhash, find_exact_duplicates, find_near_duplicates
-from dataset_detective.scanning import ImageRecord
+from tathya.hashing import compute_dhash, find_exact_duplicates, find_near_duplicates
+from tathya.scanning import ImageRecord
 
 
 def _create_image(path: Path, size=(30, 30), color="blue"):

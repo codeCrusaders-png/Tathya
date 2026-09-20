@@ -1,4 +1,4 @@
-"""Allow ``python -m dataset_detective``."""
+"""Allow ``python -m tathya``."""
 from .cli import main
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
-"""Tests for dataset_detective.scanning."""
+"""Tests for tathya.scanning."""
 import csv
 from pathlib import Path
 
 from PIL import Image
 
-from dataset_detective.scanning import detect_layout, discover_images
+from tathya.scanning import detect_layout, discover_images
 
 
 def _create_image(path: Path, size=(10, 10), color="red"):

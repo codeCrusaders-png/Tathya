@@ -1,7 +1,7 @@
-"""Tests for dataset_detective.analysis."""
+"""Tests for tathya.analysis."""
 from PIL import Image
 
-from dataset_detective.analysis import (
+from tathya.analysis import (
     aggregate_geometry,
     gini_coefficient,
     read_metadata,
@@ -9,7 +9,7 @@ from dataset_detective.analysis import (
     recommended_resize,
     summarize_channels,
 )
-from dataset_detective.scanning import ImageRecord
+from tathya.scanning import ImageRecord
 
 
 def _create_image(path, size=(100, 200), color=(255, 0, 0)):

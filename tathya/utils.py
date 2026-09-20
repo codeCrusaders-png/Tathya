@@ -1,4 +1,4 @@
-"""Shared low-level helpers for dataset_detective."""
+"""Shared low-level helpers for tathya."""
 from __future__ import annotations
 
 import hashlib

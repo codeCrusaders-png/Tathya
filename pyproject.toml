@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dataset-detective"
+name = "tathya"
 version = "1.0.0"
-description = "Know your image dataset before you train — automated structure, health, and leakage audit."
+description = "Uncover the truth of your dataset before you train — automated structure, health, and leakage audit."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "Dataset Detective Contributors" }
+    { name = "Tathya Contributors" }
 ]
 keywords = [
     "computer-vision",
@@ -48,12 +48,12 @@ dev = [
 ]
 
 [project.scripts]
-dataset-detective = "dataset_detective.cli:main"
-dataset_detective = "dataset_detective.cli:main"
+tathya = "tathya.cli:main"
+dataset-detective = "tathya.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["dataset_detective*"]
+include = ["tathya*"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"

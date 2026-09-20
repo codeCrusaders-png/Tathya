@@ -1,10 +1,10 @@
-"""Tests for dataset_detective CLI and report pipeline."""
+"""Tests for tathya CLI and report pipeline."""
 import json
 from pathlib import Path
 
 from PIL import Image
 
-from dataset_detective.cli import main
+from tathya.cli import main
 
 
 def _create_image(path: Path, size=(40, 40), color="green"):

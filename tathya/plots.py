@@ -255,6 +255,4 @@ def build_plots(plot_inputs):
             "data_url": duplicates_chart(dup_near, "near"),
         })
     return charts
-    return _histogram(values,
-                      "Colorfulness distribution (Hasler & Süsstrunk metric)",
-                      "colorfulness score", "#c98d5f")
+

@@ -31,7 +31,7 @@ def find_exact_duplicates(records):
     """Group records with identical file bytes (sha256).
 
     Returns groups sorted from largest to smallest, each group being a list of
-    :class:`~dataset_detective.scanning.ImageRecord`.
+    :class:`~tathya.scanning.ImageRecord`.
     """
     buckets = {}
     for rec in records:

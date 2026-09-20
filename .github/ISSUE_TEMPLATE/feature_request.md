@@ -10,7 +10,7 @@ assignees: ''
 A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
 **Describe the solution you'd like**
-A clear and concise description of what check, metric, or feature you would like added to Dataset Detective.
+A clear and concise description of what check, metric, or feature you would like added to Tathya.
 
 **Describe alternatives you've considered**
 A clear and concise description of any alternative solutions or features you've considered.

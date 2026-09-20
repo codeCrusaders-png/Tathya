@@ -1,2 +1,2 @@
-"""Unit test suite for dataset_detective."""
+"""Unit test suite for tathya."""
 

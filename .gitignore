@@ -67,7 +67,8 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Dataset Detective generated reports
+# Generated reports
+tathya_report/
 dataset_report/
 test_report/
 test_verify/

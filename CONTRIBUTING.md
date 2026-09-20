@@ -1,13 +1,13 @@
-# Contributing to Dataset Detective
+# Contributing to Tathya
 
-Thank you for your interest in contributing to Dataset Detective! We welcome contributions, bug reports, and feature suggestions.
+Thank you for your interest in contributing to Tathya! We welcome contributions, bug reports, and feature suggestions.
 
 ## Development Setup
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/dataset-detective.git
-   cd dataset-detective
+   git clone https://github.com/your-username/tathya.git
+   cd tathya
    ```
 
 2. **Create and activate a virtual environment:**

@@ -1,4 +1,4 @@
-# 🕵️‍♂️ Dataset Detective — know your dataset before you train
+# 🔍 Tathya — uncover the truth of your dataset before you train
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](#)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -23,8 +23,8 @@ Install locally with pip:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/dataset-detective.git
-cd dataset-detective
+git clone https://github.com/your-username/tathya.git
+cd tathya
 
 # Install in editable mode
 pip install -e .
@@ -37,23 +37,23 @@ pip install -e ".[baseline,dev]"
 
 ```bash
 # Using the installed CLI command:
-dataset-detective C:/path/to/your/dataset
+tathya C:/path/to/your/dataset
 
 # Or via script / python module:
-python dataset_detective.py C:/path/to/your/dataset
-python -m dataset_detective C:/path/to/your/dataset
+python tathya.py C:/path/to/your/dataset
+python -m tathya C:/path/to/your/dataset
 ```
 
-The report lands in `<dataset>/dataset_report/` by default:
+The report lands in `<dataset>/tathya_report/` by default:
 `report.html`, `report.md`, `report.json` (+ `assets/*.png` charts).
 
 Want to try it immediately? Generate a synthetic demo dataset first:
 
 ```bash
 python make_sample_dataset.py
-python dataset_detective.py sample_data/fruits_veggies
-python dataset_detective.py sample_data/split_dataset
-python dataset_detective.py sample_data/flat_mixed
+tathya sample_data/fruits_veggies
+tathya sample_data/split_dataset
+tathya sample_data/flat_mixed
 ```
 
 ## What it detects automatically
@@ -73,11 +73,11 @@ python dataset_detective.py sample_data/flat_mixed
 ## Command-line options
 
 ```
-usage: dataset_detective.py ROOT [options]
+usage: tathya ROOT [options]
 
   ROOT                path to the dataset folder
 
-  -o, --output DIR     report output folder (default: <root>/dataset_report)
+  -o, --output DIR     report output folder (default: <root>/tathya_report)
   --formats html md json   report formats to write (default: all three)
   --workers N          parallel worker threads (default: half the CPUs)
   --pixel-sample N     max images used for pixel statistics (default 4000)
@@ -123,8 +123,8 @@ class-aware sample.
 ## Project layout
 
 ```
-dataset_detective.py        CLI entry point
-dataset_detective/
+tathya.py                   CLI entry point
+tathya/
   scanning.py               file discovery + layout detection
   hashing.py                sha256 exact-dups + dHash near-dups
   analysis.py               per-image metadata & pixel statistics

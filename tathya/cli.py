@@ -1,4 +1,4 @@
-"""Command-line interface and orchestration for dataset_detective."""
+"""Command-line interface and orchestration for tathya."""
 from __future__ import annotations
 
 import argparse
@@ -326,7 +326,7 @@ def _print_summary(ctx, findings, elapsed, output_dir):
 
     print()
     print("=" * 78)
-    print(f" DATASET DETECTIVE  v{meta['tool_version']}   analysis summary")
+    print(f" TATHYA  v{meta['tool_version']}   analysis summary")
     print("=" * 78)
     rows = [
         ("Root", str(meta["root"])),
@@ -398,13 +398,13 @@ def _print_summary(ctx, findings, elapsed, output_dir):
 
 def _parse_args(argv):
     parser = argparse.ArgumentParser(
-        prog="dataset_detective",
-        description="Investigate an image dataset and generate a full report.",
+        prog="tathya",
+        description="Tathya — uncover the truth of your dataset before you train.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("root", help="path to the dataset folder")
     parser.add_argument("--output", "-o", default=None,
-                        help="report output folder (default: <root>/dataset_report)")
+                        help="report output folder (default: <root>/tathya_report)")
     parser.add_argument("--formats", nargs="+", default=["html", "md", "json"],
                         choices=["html", "md", "json"],
                         help="report formats to write")
@@ -468,7 +468,7 @@ def _write_empty_report(root, output_dir, formats, elapsed, quiet=False):
 
     findings = {
         "meta": {
-            "tool": "dataset_detective",
+            "tool": "tathya",
             "tool_version": __version__,
             "root": str(root),
             "dataset_name": root.name or str(root),
@@ -487,7 +487,7 @@ def _write_empty_report(root, output_dir, formats, elapsed, quiet=False):
         "plots": [],
     }
     if not quiet:
-        print("[dataset_detective] No image files found under the given folder.")
+        print("[tathya] No image files found under the given folder.")
     written = _write_reports(findings, output_dir, formats) if formats else []
     if not quiet:
         for path in written:
@@ -502,12 +502,12 @@ def main(argv=None):
     start = time.perf_counter()
     root = Path(args.root).expanduser().resolve()
     if not root.is_dir():
-        print(f"[dataset_detective] error: not a directory: {root}", file=sys.stderr)
+        print(f"[tathya] error: not a directory: {root}", file=sys.stderr)
         return 2
 
-    output_dir = Path(args.output).expanduser().resolve() if args.output else root / "dataset_report"
+    output_dir = Path(args.output).expanduser().resolve() if args.output else root / "tathya_report"
     if not args.silent:
-        print(f"[dataset_detective] Investigating {root}")
+        print(f"[tathya] Investigating {root}")
 
     records, missed_files = discover_images(root)
     if not args.silent:
@@ -702,7 +702,7 @@ def main(argv=None):
 
     findings = {
         "meta": {
-            "tool": "dataset_detective",
+            "tool": "tathya",
             "tool_version": __version__,
             "root": str(root),
             "dataset_name": root.name or str(root),
@@ -731,7 +731,7 @@ def main(argv=None):
 
     if not args.silent:
         for path in written:
-            print(f"[dataset_detective] wrote {path}")
+            print(f"[tathya] wrote {path}")
 
     if args.open:
         html_report = output_dir / "report.html"
