@@ -170,13 +170,22 @@ def detect_layout(records, root=None):
             layout.label_file = str(label_file[0])
             mapping = label_file[1]
             layout.label_source = f"{label_file[0].name}"
-            layout.class_of = mapping
+            # Populate class_of for all records matching the label file (rel_path or basename)
+            for rec in records:
+                rel = rec.rel_path
+                base = Path(rel).name
+                if rel in mapping:
+                    layout.class_of[rel] = mapping[rel]
+                elif base in mapping:
+                    layout.class_of[rel] = mapping[base]
             if layout.kind == "flat":
                 layout.kind = "label_file"
                 layout.description = (
                     f"Images sit directly in the root folder; labels were loaded from "
                     f"{label_file[0].name}."
                 )
+            elif layout.class_of:
+                layout.notes.append(f"Labels loaded from sidecar file '{label_file[0].name}' taking precedence over folder names.")
 
     if layout.kind in {"class_folders", "split_class_folders", "split_flat", "irregular"}:
         for rec, parts in zip(records, parts_list):
@@ -205,7 +214,11 @@ def finalize_layout(layout, records):
     for rec in records:
         lab = layout.class_of.get(rec.rel_path)
         if lab is None:
+            lab = layout.class_of.get(Path(rec.rel_path).name)
+        if lab is None:
             lab = _label_for_rel_path(rec.rel_path, layout.kind)
+        if lab:
+            layout.class_of[rec.rel_path] = lab
         labels.append(lab)
 
     unique = sorted({lab for lab in labels if lab})

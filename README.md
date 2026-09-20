@@ -1,6 +1,6 @@
 # 🔍 Tathya — uncover the truth of your dataset before you train
 
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](#)
+[![CI](https://github.com/codeCrusaders-png/Tathya/actions/workflows/ci.yml/badge.svg)](https://github.com/codeCrusaders-png/Tathya/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -23,8 +23,8 @@ Install locally with pip:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/tathya.git
-cd tathya
+git clone https://github.com/codeCrusaders-png/Tathya.git
+cd Tathya
 
 # Install in editable mode
 pip install -e .

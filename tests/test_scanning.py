@@ -122,3 +122,25 @@ def test_detect_partial_split_dataset_layout(tmp_path):
     assert split_names == {"train", "test"}
 
 
+def test_detect_nested_with_labels_csv_basenames(tmp_path):
+    # Images in subfolder, CSV uses simple file basenames
+    _create_image(tmp_path / "images" / "pic1.png")
+    _create_image(tmp_path / "images" / "pic2.png")
+
+    csv_path = tmp_path / "labels.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["filename", "category"])
+        writer.writerow(["pic1.png", "lion"])
+        writer.writerow(["pic2.png", "tiger"])
+
+    records, _ = discover_images(tmp_path)
+    layout = detect_layout(records, tmp_path)
+
+    assert layout.class_of.get("images/pic1.png") == "lion"
+    assert layout.class_of.get("images/pic2.png") == "tiger"
+    assert "lion" in layout.classes
+    assert "tiger" in layout.classes
+
+
+

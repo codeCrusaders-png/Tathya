@@ -6,8 +6,8 @@ Thank you for your interest in contributing to Tathya! We welcome contributions,
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/tathya.git
-   cd tathya
+   git clone https://github.com/codeCrusaders-png/Tathya.git
+   cd Tathya
    ```
 
 2. **Create and activate a virtual environment:**
