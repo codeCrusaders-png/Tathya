@@ -103,3 +103,4 @@ def test_baseline_majority_baseline_imbalance(tmp_path):
     result = run_baseline(records, labels)
     assert result is not None
     assert result["majority_baseline"] == 0.75
+
