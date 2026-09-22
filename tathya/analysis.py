@@ -142,7 +142,7 @@ def aggregate_geometry(infos):
     }
 
 
-def recommended_resize(width_stats, height_stats, multiple=16, lo=32, hi=1024):
+def recommended_resize(width_stats, height_stats, aspect_stats=None, multiple=16, lo=32, hi=1024):
     """Suggest a sensible training input size (multiples of 16)."""
     median = max(width_stats.get("median", 0), height_stats.get("median", 0))
     size = int(math.ceil((median or 0) / multiple) * multiple)
