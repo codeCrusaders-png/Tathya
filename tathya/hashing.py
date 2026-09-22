@@ -10,6 +10,16 @@ from .utils import sha256_file
 DEFAULT_DUP_THRESHOLD = 6
 
 
+def _dhash_from_image(im, size=(9, 8)):
+    gray = im.convert("L").resize(size, Image.Resampling.BILINEAR)
+    arr = np.asarray(gray, dtype=np.int16)
+    diff = (arr[:, 1:] > arr[:, :-1]).ravel()
+    value = 0
+    for bit in diff:
+        value = (value << 1) | int(bit)
+    return value
+
+
 def compute_dhash(path, size=(9, 8)):
     """Compute a 64-bit difference hash (dHash) for an image file.
 
@@ -21,15 +31,30 @@ def compute_dhash(path, size=(9, 8)):
     """
     try:
         with Image.open(path) as im:
-            gray = im.convert("L").resize(size, Image.Resampling.BILINEAR)
-        arr = np.asarray(gray, dtype=np.int16)
-        diff = (arr[:, 1:] > arr[:, :-1]).ravel()
-        value = 0
-        for bit in diff:
-            value = (value << 1) | int(bit)
-        return value
+            return _dhash_from_image(im, size)
     except Exception:
         return None
+
+
+def compute_multirotation_dhash(path, size=(9, 8)):
+    """Compute difference hashes across 4 orthogonal rotations (0, 90, 180, 270) and horizontal flip."""
+    try:
+        with Image.open(path) as im:
+            im_0 = im.convert("L")
+            im_90 = im_0.transpose(Image.Transpose.ROTATE_90)
+            im_180 = im_0.transpose(Image.Transpose.ROTATE_180)
+            im_270 = im_0.transpose(Image.Transpose.ROTATE_270)
+            im_flip = im_0.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            return (
+                _dhash_from_image(im_0, size),
+                _dhash_from_image(im_90, size),
+                _dhash_from_image(im_180, size),
+                _dhash_from_image(im_270, size),
+                _dhash_from_image(im_flip, size),
+            )
+    except Exception:
+        return None
+
 
 
 def find_exact_duplicates(records):
@@ -83,12 +108,16 @@ def _deterministic_sample(records, max_images):
     return [records[i] for i in indexes]
 
 
-def find_near_duplicates(records, threshold=DEFAULT_DUP_THRESHOLD, max_images=20000):
+def find_near_duplicates(
+    records,
+    threshold=DEFAULT_DUP_THRESHOLD,
+    max_images=20000,
+    rotation_invariant=False,
+):
     """Group perceptually similar images using 64-bit dHash fingerprints.
 
-    A fast approximate method: images are bucketed on four overlapping 16-bit
-    slices of their hash and any pair sharing a slice whose Hamming distance is
-    ``<= threshold`` is unioned.  For datasets larger than ``max_images`` a
+    When ``rotation_invariant=True``, detects duplicates across 90/180/270 degree
+    rotations and horizontal flips. For datasets larger than ``max_images`` a
     deterministic sample is analysed.
 
     Returns a list of groups (each a list of :class:`ImageRecord`), sorted from
@@ -99,32 +128,44 @@ def find_near_duplicates(records, threshold=DEFAULT_DUP_THRESHOLD, max_images=20
     else:
         sampled = list(records)
 
-    valid_sampled, hashes = [], []
+    valid_sampled, hashes_list = [], []
     for rec in sampled:
-        h = compute_dhash(rec.path)
-        if h is not None:
-            valid_sampled.append(rec)
-            hashes.append(h)
+        if rotation_invariant:
+            rot_h = compute_multirotation_dhash(rec.path)
+            if rot_h is not None:
+                valid_sampled.append(rec)
+                hashes_list.append(rot_h)
+        else:
+            h = compute_dhash(rec.path)
+            if h is not None:
+                valid_sampled.append(rec)
+                hashes_list.append((h,))
 
-    if not hashes:
+    if not hashes_list:
         return []
 
     tables = [dict() for _ in range(4)]
     dsu = _DisjointSet(len(valid_sampled))
 
-    for i, h in enumerate(hashes):
-        slices = (
-            (h >> 48) & 0xFFFF,
-            (h >> 32) & 0xFFFF,
-            (h >> 16) & 0xFFFF,
-            h & 0xFFFF,
-        )
-        for table, key in zip(tables, slices):
-            for j in table.get(key, ()):
-                if dsu.find(i) != dsu.find(j):
-                    if (h ^ hashes[j]).bit_count() <= threshold:
-                        dsu.union(i, j)
-            table.setdefault(key, []).append(i)
+    for i, h_tuple in enumerate(hashes_list):
+        for h in h_tuple:
+            slices = (
+                (h >> 48) & 0xFFFF,
+                (h >> 32) & 0xFFFF,
+                (h >> 16) & 0xFFFF,
+                h & 0xFFFF,
+            )
+            for table, key in zip(tables, slices):
+                for j in table.get(key, ()):
+                    if dsu.find(i) != dsu.find(j):
+                        min_dist = min(
+                            (ha ^ hb).bit_count()
+                            for ha in hashes_list[i]
+                            for hb in hashes_list[j]
+                        )
+                        if min_dist <= threshold:
+                            dsu.union(i, j)
+                table.setdefault(key, []).append(i)
 
     buckets = {}
     for i, rec in enumerate(valid_sampled):
@@ -132,6 +173,7 @@ def find_near_duplicates(records, threshold=DEFAULT_DUP_THRESHOLD, max_images=20
     groups = [recs for recs in buckets.values() if len(recs) > 1]
     groups.sort(key=lambda group: (-len(group), group[0].rel_path))
     return groups
+
 
 
 def find_split_leakage(exact_groups, near_groups, splits):

@@ -114,3 +114,24 @@ def test_summarize_channels(tmp_path):
     assert len(summary["channel_means"]) == 3
     assert 0.0 <= summary["brightness_mean"] <= 1.0
 
+
+def test_read_pixel_stats_full_resolution(tmp_path):
+    img_path = tmp_path / "large.png"
+    rec = _create_image(img_path, size=(300, 400), color=(128, 128, 128))
+
+    stats_thumb = read_pixel_stats(rec, thumb=100)
+    assert stats_thumb["resolution_mode"] == "thumbnail"
+    assert max(stats_thumb["sample_size"]) <= 100
+
+    stats_full = read_pixel_stats(rec, thumb=None)
+    assert stats_full["resolution_mode"] == "full"
+    assert stats_full["sample_size"] == [300, 400]
+
+    stats_full_zero = read_pixel_stats(rec, thumb=0)
+    assert stats_full_zero["resolution_mode"] == "full"
+    assert stats_full_zero["sample_size"] == [300, 400]
+
+    summary = summarize_channels([stats_full])
+    assert summary["resolution_mode"] == "full"
+
+

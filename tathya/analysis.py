@@ -45,10 +45,11 @@ def read_metadata(rec):
 
 
 def read_pixel_stats(rec, thumb=192):
-    """Compute colour/brightness statistics on a down-scaled version.
+    """Compute colour/brightness statistics on a down-scaled version (or full resolution if thumb is None or <= 0).
 
     ``thumb`` caps the longest side used for pixel statistics so that huge
-    images stay cheap to analyse.
+    images stay cheap to analyse. If thumb is None or <= 0, analysis is done
+    at full resolution.
     """
     with Image.open(rec.path) as im:
         if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
@@ -60,7 +61,8 @@ def read_pixel_stats(rec, thumb=192):
         else:
             rgb = im.convert("RGB")
 
-        rgb.thumbnail((thumb, thumb))
+        if thumb is not None and thumb > 0:
+            rgb.thumbnail((thumb, thumb))
         gray = rgb.convert("L")
 
     rgb_arr = np.asarray(rgb, dtype=np.float32) / 255.0
@@ -83,6 +85,7 @@ def read_pixel_stats(rec, thumb=192):
         corr = np.corrcoef(flat, rowvar=False)
     corr = np.nan_to_num(corr, nan=0.0, posinf=1.0, neginf=-1.0)
 
+    is_full = thumb is None or thumb <= 0
     return {
         "channel_means": channel_means.astype(float).tolist(),
         "channel_stds": channel_stds.astype(float).tolist(),
@@ -93,6 +96,8 @@ def read_pixel_stats(rec, thumb=192):
         "bright_frac": float((gray_arr > 0.88).mean()),
         "low_contrast": bool(float(gray_arr.std()) < 0.08),
         "channel_corr": corr.astype(float).tolist(),
+        "resolution_mode": "full" if is_full else "thumbnail",
+        "sample_size": [int(rgb.width), int(rgb.height)],
     }
 # --------------------------------------------------------------------------- #
 # Aggregation
@@ -185,4 +190,5 @@ def summarize_channels(pixel_results):
         "bright_frac_mean": round(float(np.mean([r["bright_frac"] for r in pixel_results])), 4),
         "low_contrast_frac": round(float(np.mean([1.0 if r["low_contrast"] else 0.0
                                                   for r in pixel_results])), 4),
+        "resolution_mode": pixel_results[0].get("resolution_mode", "thumbnail") if pixel_results else "thumbnail",
     }

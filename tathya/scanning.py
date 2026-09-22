@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import csv
 import os
+import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,6 +37,8 @@ class Layout:
     splits: list = field(default_factory=list)    # [{name, count, n_classes, class_counts}]
     class_of: dict = field(default_factory=dict)  # rel_path -> class label
     label_file: str or None = None
+    sidecar_audit: dict = field(default_factory=dict)
+    group_leakage: list = field(default_factory=list)
     notes: list = field(default_factory=list)
 
 
@@ -163,13 +167,15 @@ def detect_layout(records, root=None):
             "Mixed or nested folder depths; the deepest non-generic folder name is used "
             "as the class label."
         )
-# Optional label sidecar file (labels.csv / ...)
+    # Optional label sidecar file (labels.csv / ...)
+    group_mapping = {}
     if root is not None:
-        label_file = _load_label_file(root)
-        if label_file is not None:
-            layout.label_file = str(label_file[0])
-            mapping = label_file[1]
-            layout.label_source = f"{label_file[0].name}"
+        label_res = _load_label_file(root, records=records)
+        if label_res is not None:
+            label_path, mapping, group_mapping, sidecar_audit = label_res
+            layout.label_file = str(label_path)
+            layout.label_source = f"{label_path.name}"
+            layout.sidecar_audit = sidecar_audit
             # Populate class_of for all records matching the label file (rel_path or basename)
             for rec in records:
                 rel = rec.rel_path
@@ -182,10 +188,14 @@ def detect_layout(records, root=None):
                 layout.kind = "label_file"
                 layout.description = (
                     f"Images sit directly in the root folder; labels were loaded from "
-                    f"{label_file[0].name}."
+                    f"{label_path.name}."
                 )
             elif layout.class_of:
-                layout.notes.append(f"Labels loaded from sidecar file '{label_file[0].name}' taking precedence over folder names.")
+                layout.notes.append(f"Labels loaded from sidecar file '{label_path.name}' taking precedence over folder names.")
+            if sidecar_audit.get("missing_on_disk"):
+                layout.notes.append(f"Sidecar file lists {len(sidecar_audit['missing_on_disk'])} file(s) not found on disk.")
+            if sidecar_audit.get("null_or_empty_labels"):
+                layout.notes.append(f"Sidecar file contains {len(sidecar_audit['null_or_empty_labels'])} empty or null label entries.")
 
     if layout.kind in {"class_folders", "split_class_folders", "split_flat", "irregular"}:
         for rec, parts in zip(records, parts_list):
@@ -198,6 +208,10 @@ def detect_layout(records, root=None):
             layout.class_of.setdefault(rec.rel_path, label)
 
     finalize_layout(layout, records)
+    if layout.splits:
+        layout.group_leakage = detect_group_leakage(records, layout.splits, group_map=group_mapping)
+        if layout.group_leakage:
+            layout.notes.append(f"Group/subject leakage detected across splits for {len(layout.group_leakage)} group(s).")
     return layout
 
 
@@ -276,8 +290,8 @@ def _ordered_splits(records):
 # Label sidecar files (labels.csv / classes.csv / ...)
 # --------------------------------------------------------------------------- #
 
-def _load_label_file(root):
-    """Look for a CSV listing image -> label and return (path, mapping) or None."""
+def _load_label_file(root, records=None):
+    """Look for a CSV listing image -> label and return (path, mapping, group_mapping, sidecar_audit) or None."""
     root = Path(root)
     candidates = []
     for name in sorted(LABEL_FILE_NAMES):
@@ -286,46 +300,158 @@ def _load_label_file(root):
             candidates.append(candidate)
     candidates.extend(sorted(p for p in root.glob("*.csv") if p.is_file()))
     for label_path in candidates:
-        mapping = _parse_label_file(label_path)
+        mapping, group_mapping, sidecar_audit = _parse_label_file(label_path, records=records)
         if mapping:
-            return label_path, mapping
+            return label_path, mapping, group_mapping, sidecar_audit
     return None
 
 
-def _parse_label_file(path):
-    """Parse a CSV with (file, label) columns into ``{rel_or_base_path: label}``."""
+def _parse_label_file(path, records=None):
+    """Parse a CSV with (file, label) columns and audit its contents.
+
+    Returns ``(mapping, group_mapping, sidecar_audit)``.
+    """
     mapping = {}
+    group_mapping = {}
     try:
         with open(path, "r", encoding="utf-8-sig", newline="") as handle:
             rows = list(csv.reader(handle))
     except (OSError, UnicodeDecodeError):
-        return mapping
+        return mapping, group_mapping, {}
     if not rows:
-        return mapping
+        return mapping, group_mapping, {}
 
     header = [cell.strip().lower() for cell in rows[0]]
-    file_col = label_col = None
+    file_col = label_col = group_col = None
     for idx, name in enumerate(header):
         if file_col is None and name in {
             "file", "filename", "image", "img", "name", "path",
-            "image_name", "file_name", "image_path", "files",
+            "image_name", "file_name", "image_path", "files", "filepath",
         }:
             file_col = idx
         if label_col is None and name in {
             "label", "class", "classes", "category", "target", "type", "y", "label_name",
         }:
             label_col = idx
+        if group_col is None and name in {
+            "group", "group_id", "subject", "subject_id", "patient", "patient_id",
+            "scene", "scene_id", "case", "case_id", "donor", "donor_id", "person",
+            "person_id", "user", "user_id",
+        }:
+            group_col = idx
+
     if file_col is None and len(rows[0]) < 2:
-        return mapping
+        return mapping, group_mapping, {}
+
+    null_or_empty_labels = []
+    duplicate_entries = []
+    seen_files = set()
+    csv_files = []
 
     for row in rows[1:]:
-        if not row or not row[0].strip():
+        if not row or not any(cell.strip() for cell in row):
             continue
         fname = row[file_col if file_col is not None else 0].strip().replace("\\", "/")
+        if not fname:
+            continue
+        csv_files.append(fname)
+        if fname in seen_files:
+            duplicate_entries.append(fname)
+        seen_files.add(fname)
+
+        label = ""
         if label_col is not None:
             label = row[label_col].strip() if len(row) > label_col else ""
+        elif len(row) > 1:
+            label = row[1].strip()
+
+        if not label:
+            null_or_empty_labels.append(fname)
         else:
-            label = row[1].strip() if len(row) > 1 else ""
-        if fname and label:
             mapping[fname] = label
-    return mapping
+
+        if group_col is not None and len(row) > group_col:
+            grp = row[group_col].strip()
+            if grp:
+                group_mapping[fname] = grp
+
+    missing_on_disk = []
+    unreferenced_on_disk = []
+    if records:
+        disk_rels = {r.rel_path for r in records}
+        disk_bases = {Path(r.rel_path).name for r in records}
+        csv_bases = {Path(f).name for f in csv_files}
+        csv_all = set(csv_files) | csv_bases
+
+        for f in csv_files:
+            if f not in disk_rels and Path(f).name not in disk_bases:
+                missing_on_disk.append(f)
+
+        for r in records:
+            if r.rel_path not in csv_all and Path(r.rel_path).name not in csv_all:
+                unreferenced_on_disk.append(r.rel_path)
+
+    sidecar_audit = {
+        "total_rows": len(rows) - 1,
+        "valid_labels": len(mapping),
+        "missing_on_disk": missing_on_disk,
+        "unreferenced_on_disk": unreferenced_on_disk,
+        "null_or_empty_labels": null_or_empty_labels,
+        "duplicate_entries": duplicate_entries,
+        "group_column": header[group_col] if group_col is not None else None,
+    }
+    return mapping, group_mapping, sidecar_audit
+
+
+_GROUP_PREFIX_RE = re.compile(
+    r"^(patient\d+|subject\d+|scene\d+|case\d+|donor\d+|user\d+|p\d+|s\d+|[a-zA-Z]+_\d+)[_\-]",
+    re.IGNORECASE,
+)
+
+
+def detect_group_leakage(records, splits, group_map=None):
+    """Detect subject/group leakage across dataset splits.
+
+    Detects when images with the same subject/patient/scene ID appear in multiple
+    splits (e.g. both train and test/validation). Identifiers are pulled from
+    ``group_map`` (from sidecar metadata) or inferred from filename prefixes.
+
+    Returns a list of dicts:
+    [{'group': str, 'splits': [str, ...], 'images': [str, ...], 'count': int}]
+    """
+    if not splits or len(splits) < 2:
+        return []
+
+    group_records = defaultdict(list)
+
+    for rec in records:
+        parts = rec.rel_path.split("/")
+        if len(parts) < 2:
+            continue
+        split_name = parts[0]
+        base = Path(rec.rel_path).name
+
+        group_id = None
+        if group_map:
+            group_id = group_map.get(rec.rel_path) or group_map.get(base)
+
+        if not group_id:
+            m = _GROUP_PREFIX_RE.match(base)
+            if m:
+                group_id = m.group(1).lower()
+
+        if group_id:
+            group_records[group_id].append((split_name, rec.rel_path))
+
+    leakage = []
+    for group_id, items in sorted(group_records.items()):
+        split_names = {item[0] for item in items}
+        if len(split_names) > 1:
+            leakage.append({
+                "group": group_id,
+                "splits": sorted(split_names),
+                "images": [item[1] for item in items],
+                "count": len(items),
+            })
+
+    return leakage

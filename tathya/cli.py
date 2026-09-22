@@ -210,6 +210,33 @@ def _compose_alerts(ctx):
                        "message": f"Potential data leakage risk: {leak['groups']} duplicate group(s) "
                                   f"span {leak['between']} ({leak['images']} images) — manual verification advised."})
 
+    for gleak in layout.get("group_leakage", []):
+        alerts.append({
+            "level": "error",
+            "message": f"Subject/Group leakage: group '{gleak['group']}' spans splits {', '.join(gleak['splits'])} "
+                       f"({gleak['count']} images) — images from the same subject must not cross splits."
+        })
+
+    sidecar_audit = layout.get("sidecar_audit") or {}
+    if sidecar_audit.get("missing_on_disk"):
+        n_miss = len(sidecar_audit["missing_on_disk"])
+        alerts.append({
+            "level": "error",
+            "message": f"Sidecar metadata mismatch: {n_miss} file(s) listed in sidecar do not exist on disk."
+        })
+    if sidecar_audit.get("null_or_empty_labels"):
+        n_null = len(sidecar_audit["null_or_empty_labels"])
+        alerts.append({
+            "level": "warn",
+            "message": f"Sidecar metadata: {n_null} entry/entries have empty or missing labels."
+        })
+    if sidecar_audit.get("duplicate_entries"):
+        n_dup = len(sidecar_audit["duplicate_entries"])
+        alerts.append({
+            "level": "warn",
+            "message": f"Sidecar metadata: {n_dup} duplicate image filename(s) listed in sidecar."
+        })
+
     counts = classes.get("counts", {})
     if counts:
         balance = classes.get("balance", {})
@@ -279,6 +306,7 @@ def _compose_alerts(ctx):
     return alerts
 def _compose_recommendations(ctx):
     recs = []
+    layout = ctx["layout"]
     geometry = ctx["geometry"]
     duplicates = ctx["duplicates"]
     corrupt = ctx["corrupt"]
@@ -301,6 +329,11 @@ def _compose_recommendations(ctx):
                     "representative per group and re-split afterwards.")
     for leak in duplicates.get("leakage", []):
         recs.append(f"Re-split the dataset so no near-duplicate group spans {leak['between']}.")
+    if layout.get("group_leakage"):
+        recs.append("Re-split dataset at subject/group level (e.g. GroupKFold / GroupShuffleSplit) "
+                    "so no patient/subject appears across both train and validation/test splits.")
+    if (layout.get("sidecar_audit") or {}).get("missing_on_disk"):
+        recs.append("Re-generate or edit sidecar metadata to remove references to files missing from disk.")
     ratio = classes.get("balance", {}).get("imbalance_ratio", 1) or 1
     if ratio > 10:
         recs.append("Balance classes via stratified sampling, class weights, or over-sampling "
@@ -434,6 +467,12 @@ def _parse_args(argv):
                         help="dHash Hamming distance for near-duplicate detection")
     parser.add_argument("--near-dup-cap", type=int, default=20000,
                         help="max images considered for near-duplicate detection")
+    parser.add_argument("--rotation-invariant", action="store_true",
+                        help="detect near-duplicates across 90/180/270 degree rotations and flips")
+    parser.add_argument("--thumb-size", type=int, default=192,
+                        help="thumbnail size for pixel statistics pass (default: 192)")
+    parser.add_argument("--full-res", action="store_true",
+                        help="compute pixel statistics on full-resolution images instead of thumbnails")
     parser.add_argument("--no-baseline", action="store_true",
                         help="skip the trainability baseline")
     parser.add_argument("--no-plots", action="store_true",
@@ -529,6 +568,9 @@ def main(argv=None):
     if args.near_dup_cap < 1:
         print("[tathya] error: --near-dup-cap must be >= 1", file=sys.stderr)
         return 2
+    if args.thumb_size < 1:
+        print("[tathya] error: --thumb-size must be >= 1", file=sys.stderr)
+        return 2
 
     root = Path(args.root).expanduser().resolve()
     if not root.is_dir():
@@ -614,7 +656,10 @@ def main(argv=None):
     if not args.no_pixel_stats:
         pixel_records = _select_pixel_sample(records, infos, layout, args.pixel_sample)
         if pixel_records:
-            raw = _run_parallel(pixel_records, read_pixel_stats, workers, "pixels", args.silent)
+            thumb_arg = None if args.full_res else args.thumb_size
+            def _pixel_fn(rec):
+                return read_pixel_stats(rec, thumb=thumb_arg)
+            raw = _run_parallel(pixel_records, _pixel_fn, workers, "pixels", args.silent)
             results = [raw[rec.rel_path] for rec in pixel_records
                        if not isinstance(raw[rec.rel_path], Exception)]
             if results:
@@ -633,8 +678,12 @@ def main(argv=None):
 
         if not args.silent:
             print("  checking for near-duplicates (dHash) ...")
-        near_groups = find_near_duplicates(records, threshold=args.dup_threshold,
-                                           max_images=args.near_dup_cap)
+        near_groups = find_near_duplicates(
+            records,
+            threshold=args.dup_threshold,
+            max_images=args.near_dup_cap,
+            rotation_invariant=args.rotation_invariant,
+        )
         near_names, near_images, near_bytes = _group_repr(near_groups)
         near_sampled = len(records) > args.near_dup_cap
 
@@ -646,6 +695,7 @@ def main(argv=None):
 
     duplicates_block = {
         "threshold": args.dup_threshold,
+        "rotation_invariant": args.rotation_invariant,
         "exact_groups": len(exact_names),
         "exact_images": exact_images,
         "exact_bytes": exact_bytes,
@@ -703,6 +753,8 @@ def main(argv=None):
             "label_source": layout.label_source,
             "label_file": layout.label_file,
             "splits": layout.splits,
+            "sidecar_audit": layout.sidecar_audit,
+            "group_leakage": layout.group_leakage,
             "notes": layout.notes,
         },
         "classes": classes_block,

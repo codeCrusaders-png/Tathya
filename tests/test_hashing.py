@@ -174,4 +174,33 @@ def test_dhash_across_formats(tmp_path):
     assert len(near[0]) == 2
 
 
+def test_rotation_invariant_near_duplicates(tmp_path):
+    orig_path = tmp_path / "orig.png"
+    rot_path = tmp_path / "rot90.png"
+
+    # Create an image with an asymmetrical pattern
+    img = Image.new("RGB", (64, 64), color="white")
+    for x in range(32):
+        for y in range(64):
+            img.putpixel((x, y), (0, 0, 0))
+    img.save(orig_path)
+
+    # 90 degree rotated version
+    rot = img.transpose(Image.Transpose.ROTATE_90)
+    rot.save(rot_path)
+
+    r_orig = ImageRecord(path=str(orig_path), rel_path="orig.png", size_bytes=orig_path.stat().st_size)
+    r_rot = ImageRecord(path=str(rot_path), rel_path="rot90.png", size_bytes=rot_path.stat().st_size)
+
+    # Default near-duplicate check does not group 90-degree rotated versions if dhash differs
+    groups_default = find_near_duplicates([r_orig, r_rot], threshold=6, rotation_invariant=False)
+    assert len(groups_default) == 0
+    # Rotation-invariant check matches rotated versions
+    groups_rot = find_near_duplicates([r_orig, r_rot], threshold=6, rotation_invariant=True)
+
+    assert len(groups_rot) == 1
+    assert len(groups_rot[0]) == 2
+
+
+
 

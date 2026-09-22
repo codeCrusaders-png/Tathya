@@ -103,4 +103,32 @@ def test_cli_markdown_with_plots(tmp_path):
     assert parsed["meta"]["image_files"] == 3
 
 
+def test_cli_new_flags(tmp_path):
+    dataset_dir = tmp_path / "data"
+    _create_image(dataset_dir / "img1.png", size=(50, 50))
+    _create_image(dataset_dir / "img2.png", size=(50, 50))
+
+    # Invalid thumb-size (< 1)
+    assert main([str(dataset_dir), "--thumb-size", "0", "--silent"]) == 2
+
+    # Run with --full-res and --rotation-invariant
+    out_dir = tmp_path / "report_flags"
+    code = main([
+        str(dataset_dir),
+        "-o", str(out_dir),
+        "--full-res",
+        "--rotation-invariant",
+        "--formats", "json",
+        "--silent",
+    ])
+    assert code == 0
+
+    with open(out_dir / "report.json", encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert data["duplicates"]["rotation_invariant"] is True
+    assert data["pixels"]["resolution_mode"] == "full"
+
+
+
 

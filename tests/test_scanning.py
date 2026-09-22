@@ -143,4 +143,47 @@ def test_detect_nested_with_labels_csv_basenames(tmp_path):
     assert "tiger" in layout.classes
 
 
+def test_sidecar_audit(tmp_path):
+    _create_image(tmp_path / "img1.png")
+    _create_image(tmp_path / "img2.png")
+    _create_image(tmp_path / "unreferenced.png")
+
+    csv_path = tmp_path / "labels.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["filename", "label"])
+        writer.writerow(["img1.png", "class_a"])
+        writer.writerow(["img2.png", ""])  # empty label
+        writer.writerow(["img1.png", "class_a"])  # duplicate entry
+        writer.writerow(["ghost.png", "class_b"])  # missing on disk
+
+    records, _ = discover_images(tmp_path)
+    layout = detect_layout(records, tmp_path)
+
+    audit = layout.sidecar_audit
+    assert audit is not None
+    assert "ghost.png" in audit["missing_on_disk"]
+    assert "img2.png" in audit["null_or_empty_labels"]
+    assert "img1.png" in audit["duplicate_entries"]
+    assert "unreferenced.png" in audit["unreferenced_on_disk"]
+
+
+def test_group_leakage_detection(tmp_path):
+    # Subject patient01 has images in both train and test splits -> leakage!
+    # Subject patient02 has images only in train -> no leakage.
+    _create_image(tmp_path / "train" / "patient01_img1.png")
+    _create_image(tmp_path / "test" / "patient01_img2.png")
+    _create_image(tmp_path / "train" / "patient02_img1.png")
+
+    records, _ = discover_images(tmp_path)
+    layout = detect_layout(records, tmp_path)
+
+    assert len(layout.group_leakage) == 1
+    leak = layout.group_leakage[0]
+    assert leak["group"] == "patient01"
+    assert set(leak["splits"]) == {"train", "test"}
+    assert leak["count"] == 2
+
+
+
 
