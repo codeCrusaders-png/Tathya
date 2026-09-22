@@ -26,6 +26,7 @@ from .hashing import find_exact_duplicates, find_near_duplicates, find_split_lea
 from .model import run_baseline
 from .plots import build_plots
 from .report import render_html, render_markdown
+from .sar import compose_sar_alerts_and_recs, is_sar_or_geotiff_dataset, run_sar_audit
 from .scanning import detect_layout, discover_images
 from .utils import human_size, human_time
 
@@ -425,6 +426,28 @@ def _print_summary(ctx, findings, elapsed, output_dir):
               f"{baseline['accuracy_std']*100:.1f}% CV "
               f"({baseline['images_used']} images / {baseline['classes_used']} classes, 3 folds)")
 
+    sar = findings.get("sar")
+    if sar:
+        print()
+        print("  SAR & Remote Sensing Integrity")
+        pols = sar.get("polarizations", {})
+        if pols.get("detected_polarizations"):
+            print(f"    polarizations  {', '.join(pols['detected_polarizations'])} "
+                  f"({pols.get('dual_pol_pairs', 0)} dual-pol pairs, {len(pols.get('orphan_scenes', []))} orphan scenes)")
+        cal = sar.get("radiometry", {})
+        if cal.get("scales_detected"):
+            nodata_str = ", ".join(cal.get("nodata_types", [])) or "none"
+            print(f"    radiometry     scales: {', '.join(cal['scales_detected'])} "
+                  f"(mixed: {cal.get('mixed_calibration', False)}, NoData: {nodata_str})")
+        geo = sar.get("geospatial", {})
+        if geo.get("georeferenced_count", 0) > 0:
+            crs_str = ", ".join(geo.get("epsg_counts", {}).keys())
+            print(f"    geospatial     {geo['georeferenced_count']} georeferenced tiles ({crs_str})")
+        spat = sar.get("spatial_leakage", {})
+        if spat.get("leakage_risk", "none") != "none":
+            print(f"    spatial risk   {spat['leakage_risk'].upper()} — {len(spat.get('overlapping_pairs', []))} overlapping, "
+                  f"{len(spat.get('adjacent_pairs', []))} adjacent cross-split tiles")
+
     alerts = findings["alerts"]
     warn = sum(1 for a in alerts if a["level"] == "warn")
     err = sum(1 for a in alerts if a["level"] == "error")
@@ -473,6 +496,8 @@ def _parse_args(argv):
                         help="thumbnail size for pixel statistics pass (default: 192)")
     parser.add_argument("--full-res", action="store_true",
                         help="compute pixel statistics on full-resolution images instead of thumbnails")
+    parser.add_argument("--sar", action="store_true",
+                        help="run SAR (Synthetic Aperture Radar) and remote sensing integrity checks")
     parser.add_argument("--no-baseline", action="store_true",
                         help="skip the trainability baseline")
     parser.add_argument("--no-plots", action="store_true",
@@ -771,6 +796,18 @@ def main(argv=None):
     alerts = _compose_alerts(ctx)
     recommendations = _compose_recommendations(ctx)
 
+    # --- SAR & Remote Sensing pass -------------------------------------------
+    sar_audit = None
+    if args.sar or is_sar_or_geotiff_dataset(records, root):
+        if not args.silent:
+            print("  running SAR & remote sensing integrity checks ...")
+        sar_audit = run_sar_audit(records, layout, root, sample_size=args.pixel_sample)
+        sar_alerts, sar_recs = compose_sar_alerts_and_recs(sar_audit)
+        alerts.extend(sar_alerts)
+        recommendations.extend(sar_recs)
+
+    ctx["sar"] = sar_audit
+
     from datetime import datetime, timezone
 
     findings = {
@@ -794,6 +831,7 @@ def main(argv=None):
         "modes": modes,
         "duplicates": duplicates_block,
         "baseline": baseline,
+        "sar": sar_audit,
         "alerts": alerts,
         "recommendations": recommendations,
         "plots": plots,

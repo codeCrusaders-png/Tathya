@@ -227,6 +227,35 @@ def _build_markdown_details(lines, findings, asset_dir="assets"):
                 lines.append(f"*{caption}*")
             lines.append("")
 
+    # --- SAR & Remote Sensing ----------------------------------------------
+    sar = findings.get("sar")
+    if sar:
+        lines.append("## SAR & Remote Sensing Integrity")
+        lines.append("")
+        pols = sar.get("polarizations", {})
+        if pols.get("detected_polarizations"):
+            lines.append(f"- **Polarizations**: {', '.join(pols['detected_polarizations'])} "
+                         f"({pols.get('dual_pol_pairs', 0)} dual-pol pairs, {len(pols.get('orphan_scenes', []))} orphan scenes)")
+        cal = sar.get("radiometry", {})
+        if cal.get("scales_detected"):
+            nodata_str = ", ".join(cal.get("nodata_types", [])) or "none"
+            lines.append(f"- **Radiometric Calibration**: {', '.join(cal['scales_detected'])} "
+                         f"(mixed: {cal.get('mixed_calibration', False)}, NoData: {nodata_str})")
+        geo = sar.get("geospatial", {})
+        if geo.get("georeferenced_count", 0) > 0:
+            crs_str = ", ".join(geo.get("epsg_counts", {}).keys())
+            lines.append(f"- **Geospatial CRS**: {geo['georeferenced_count']} georeferenced tiles ({crs_str})")
+        annos = sar.get("annotations", {})
+        if annos.get("paired_masks") or annos.get("paired_geojsons"):
+            lines.append(f"- **Annotations**: {annos.get('paired_masks', 0)} paired raster masks, "
+                         f"{annos.get('paired_geojsons', 0)} paired GeoJSON vectors")
+        spat = sar.get("spatial_leakage", {})
+        if spat.get("leakage_risk", "none") != "none":
+            lines.append(f"- **Spatial Leakage Risk**: **{spat['leakage_risk'].upper()}** "
+                         f"({len(spat.get('overlapping_pairs', []))} overlapping pairs, "
+                         f"{len(spat.get('adjacent_pairs', []))} adjacent pairs across splits)")
+        lines.append("")
+
     recs = findings.get("recommendations", [])
     if recs:
         lines.append("## Recommendations")
@@ -517,6 +546,34 @@ def render_html(findings):
                          f'alt="{_esc(plot["title"])}">'
                          f'<div class="cap"><strong>{_esc(plot["title"])}.</strong> '
                          f'{_esc(plot["caption"])}</div></div>')
+
+    # SAR & Remote Sensing ---------------------------------------------------
+    sar = findings.get("sar")
+    if sar:
+        lines.append("<h2>SAR &amp; Remote Sensing Integrity</h2>")
+        pols = sar.get("polarizations", {})
+        if pols.get("detected_polarizations"):
+            lines.append(f"<p><strong>Polarizations:</strong> {', '.join(_esc(p) for p in pols['detected_polarizations'])} "
+                         f"({pols.get('dual_pol_pairs', 0)} dual-pol pairs, {len(pols.get('orphan_scenes', []))} orphan scenes)</p>")
+        cal = sar.get("radiometry", {})
+        if cal.get("scales_detected"):
+            nodata_str = ", ".join(_esc(t) for t in cal.get("nodata_types", [])) or "none"
+            lines.append(f"<p><strong>Radiometric calibration:</strong> {', '.join(_esc(s) for s in cal['scales_detected'])} "
+                         f"(mixed calibration: <strong>{cal.get('mixed_calibration', False)}</strong>, NoData: {nodata_str})</p>")
+        geo = sar.get("geospatial", {})
+        if geo.get("georeferenced_count", 0) > 0:
+            crs_str = ", ".join(f"{_esc(k)} ({v})" for k, v in geo.get("epsg_counts", {}).items())
+            lines.append(f"<p><strong>Geospatial CRS:</strong> {geo['georeferenced_count']} georeferenced tiles — {crs_str}</p>")
+        annos = sar.get("annotations", {})
+        if annos.get("paired_masks") or annos.get("paired_geojsons"):
+            lines.append(f"<p><strong>Annotations:</strong> {annos.get('paired_masks', 0)} paired raster masks, "
+                         f"{annos.get('paired_geojsons', 0)} paired GeoJSON vectors</p>")
+        spat = sar.get("spatial_leakage", {})
+        if spat.get("leakage_risk", "none") != "none":
+            tag_class = "error" if spat['leakage_risk'] == "critical" else "warn"
+            lines.append(f'<div class="alert {tag_class}"><span class="tag">[{spat["leakage_risk"].upper()}]</span> '
+                         f"Spatial split leakage risk: {len(spat.get('overlapping_pairs', []))} overlapping tile pair(s), "
+                         f"{len(spat.get('adjacent_pairs', []))} adjacent tile pair(s) across splits.</div>")
 
     # Recommendations ------------------------------------------------------------
     if recs:
