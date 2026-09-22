@@ -103,4 +103,7 @@ def test_baseline_majority_baseline_imbalance(tmp_path):
     result = run_baseline(records, labels)
     assert result is not None
     assert result["majority_baseline"] == 0.75
+    assert "balanced_accuracy_mean" in result
+    assert "fold_scores" in result
+    assert len(result["fold_scores"]) == 3
 

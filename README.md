@@ -60,14 +60,14 @@ tathya sample_data/flat_mixed
 
 | Area | Checks |
 |---|---|
-| **Structure** | Folder-per-class, train/val/test splits, flat/unlabelled, or `labels.csv` sidecar files |
+| **Structure & Sidecar** | Folder-per-class, train/val/test splits, flat/unlabelled, or `labels.csv` sidecars; audits missing files on disk, unreferenced files, duplicate entries, and null labels |
 | **Class balance** | Per-class counts, imbalance ratio (max/min), Gini coefficient, tiny classes |
 | **Health** | Corrupt/unreadable files, file formats, colour modes, EXIF orientation, multi-frame images |
-| **Geometry** | Min/median/max sizes, percentiles, aspect ratios + a recommended resize size |
-| **Pixels** | Mean brightness/contrast, Hasler-Süsstrunk colorfulness, RGB channel correlation, over/under-exposure and low-contrast ratios (sampled on thumbnails) |
-| **Duplicates** | Exact duplicates (sha256) **and** perceptual near-duplicates (64-bit dHash, no extra dependency) with potential disk savings |
-| **Leakage** | Near/exact duplicate groups that span train ↔ test / val — optimistic validation warning |
-| **Trainability** | Optional `PCA + logistic regression` 3-fold CV baseline (sklearn) |
+| **Geometry** | Min/median/max sizes, percentiles, aspect ratios + recommended resize size & letterboxing guidance |
+| **Pixels** | Mean brightness/contrast, Hasler-Süsstrunk colorfulness, RGB channel correlation, over/under-exposure and low-contrast ratios (thumbnails or `--full-res`) |
+| **Duplicates** | Exact duplicates (sha256) **and** perceptual near-duplicates (64-bit dHash, with optional `--rotation-invariant` for 90°/180°/270° rotations & flips) |
+| **Leakage** | Duplicate groups spanning splits **and** subject/patient/scene ID group leakage across train ↔ test / val |
+| **Trainability** | Optional `PCA + logistic regression` 3-fold CV baseline with accuracy and balanced accuracy (sklearn) |
 | **Alerts** | Severity-tagged findings + a concrete recommendations checklist |
 
 ## Command-line options
@@ -75,22 +75,27 @@ tathya sample_data/flat_mixed
 ```
 usage: tathya ROOT [options]
 
-  ROOT                path to the dataset folder
+  ROOT                    path to the dataset folder
 
-  -o, --output DIR     report output folder (default: <root>/tathya_report)
-  --formats html md json   report formats to write (default: all three)
-  --workers N          parallel worker threads (default: half the CPUs)
-  --pixel-sample N     max images used for pixel statistics (default 4000)
-  --no-pixel-stats     skip the pixel-statistics pass
-  --no-dedup           skip exact + near-duplicate detection
-  --dup-threshold T    dHash Hamming distance for near-dups (default 6)
-  --near-dup-cap N     images considered for near-dup detection (default 20000;
-                       larger datasets are deterministically sampled)
-  --no-baseline        skip the trainability baseline
-  --no-plots           skip chart rendering
-  --silent             quieter console output
-  --open               open report.html in the browser when done
+  -o, --output DIR        report output folder (default: <root>/tathya_report)
+  --formats html md json  report formats to write (default: all three)
+  --workers N             parallel worker threads (default: half the CPUs)
+  --pixel-sample N        max images used for pixel statistics (default 4000)
+  --no-pixel-stats        skip the pixel-statistics pass
+  --full-res              compute pixel statistics at full resolution (no thumbnail downsampling)
+  --thumb-size N          thumbnail size for pixel statistics pass (default: 192)
+  --no-dedup              skip exact + near-duplicate detection
+  --dup-threshold T       dHash Hamming distance for near-dups (default 6)
+  --near-dup-cap N        images considered for near-dup detection (default 20000;
+                          larger datasets are deterministically sampled)
+  --rotation-invariant    detect near-duplicates across 90°/180°/270° rotations and horizontal flips
+  --no-baseline           skip the trainability baseline
+  --no-plots              skip chart rendering
+  --silent                quieter console output
+  --open                  open report.html in the browser when done
 ```
+
+> **Remote Sensing & SAR**: Looking to audit Synthetic Aperture Radar (SAR) or GeoTIFF Earth Observation datasets? Check out the dedicated [`SAR` branch](https://github.com/codeCrusaders-png/Tathya/tree/SAR) for polarization parity (VV/VH), radiometric backscatter calibration (dB vs linear), geospatial CRS verification, annotation mask alignment, and spatial autocorrelation split leakage checks.
 
 For very large datasets all the heavy passes (metadata, hashing, pixel stats)
 are parallelised with a thread pool and are **resumable-friendly**: geometry

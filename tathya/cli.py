@@ -320,8 +320,13 @@ def _compose_recommendations(ctx):
         recs.append(f"Remove or re-download the {len(corrupt)} corrupt/unreadable file(s) "
                     "before training; they will crash a DataLoader.")
     if geometry.get("recommended"):
-        recs.append(f"Resize or letterbox to {geometry['recommended']} (multiple of 16) and "
-                    "adjust for the dominant aspect ratio before training.")
+        if geometry.get("resize_strategy") == "letterbox":
+            aspect_val = geometry.get("aspect", {}).get("median", 1.0)
+            recs.append(f"Pad or letterbox images to {geometry['recommended']} (multiple of 16) rather than "
+                        f"stretching; dominant aspect ratio is {aspect_val:.2f}:1.")
+        else:
+            recs.append(f"Resize or letterbox to {geometry['recommended']} (multiple of 16) and "
+                        "adjust for the dominant aspect ratio before training.")
     if duplicates.get("exact_groups"):
         recs.append(f"Delete {duplicates['exact_images']} exact duplicate files "
                     f"(saves ~{human_size(duplicates['exact_bytes'])}).")
@@ -658,7 +663,11 @@ def main(argv=None):
 # --- geometry --------------------------------------------------------------
     geometry = aggregate_geometry(valid_infos)
     if geometry.get("width"):
-        geometry["recommended"] = recommended_resize(geometry["width"], geometry["height"])
+        geometry["recommended"] = recommended_resize(
+            geometry["width"], geometry["height"], geometry.get("aspect")
+        )
+        aspect_med = geometry.get("aspect", {}).get("median", 1.0)
+        geometry["resize_strategy"] = "letterbox" if (aspect_med < 0.8 or aspect_med > 1.25) else "direct"
 
     aspects = []
     for info in valid_infos:

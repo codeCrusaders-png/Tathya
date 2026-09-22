@@ -16,7 +16,7 @@ def run_baseline(records, labels, seed=7, per_class=400, max_images=20000, thumb
     try:
         from sklearn.decomposition import PCA
         from sklearn.linear_model import LogisticRegression
-        from sklearn.model_selection import StratifiedKFold, cross_val_score
+        from sklearn.model_selection import StratifiedKFold, cross_val_score, cross_validate
         from sklearn.pipeline import make_pipeline
     except Exception:
         return None
@@ -76,17 +76,28 @@ def run_baseline(records, labels, seed=7, per_class=400, max_images=20000, thumb
     )
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=seed)
     try:
-        scores = cross_val_score(pipeline, x, y, cv=cv, scoring="accuracy", n_jobs=1)
+        cv_res = cross_validate(
+            pipeline, x, y, cv=cv, scoring=["accuracy", "balanced_accuracy"], n_jobs=1
+        )
+        acc_scores = cv_res["test_accuracy"]
+        bal_acc_scores = cv_res["test_balanced_accuracy"]
     except Exception:
-        return None
+        try:
+            acc_scores = cross_val_score(pipeline, x, y, cv=cv, scoring="accuracy", n_jobs=1)
+            bal_acc_scores = acc_scores
+        except Exception:
+            return None
 
     return {
         "images_used": int(len(x)),
         "classes_used": len(counts),
         "feature_pipeline": f"{thumb}x{thumb} grayscale + PCA({n_components}) + logistic regression",
         "cv_folds": cv_folds,
-        "accuracy_mean": round(float(scores.mean()), 4),
-        "accuracy_std": round(float(scores.std()), 4),
+        "accuracy_mean": round(float(acc_scores.mean()), 4),
+        "accuracy_std": round(float(acc_scores.std()), 4),
+        "balanced_accuracy_mean": round(float(bal_acc_scores.mean()), 4),
+        "balanced_accuracy_std": round(float(bal_acc_scores.std()), 4),
+        "fold_scores": [round(float(s), 4) for s in acc_scores],
         "majority_baseline": majority_baseline,
         "note": "Quick sanity baseline only. Low score may reflect non-linear complexity; high score does not guarantee generalization.",
     }
